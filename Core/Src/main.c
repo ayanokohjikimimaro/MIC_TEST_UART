@@ -54,7 +54,7 @@ typedef enum {
 #define UART_RX_DMA_BUFFER_SIZE 128 // UART DMA受信バッファサイズ
 #define UART_TX_BUFFER_SIZE 256 // printf用UART送信バッファサイズ (sprintfで使用)
 
-#define PRINT_DATA_COUNT 300     // printfで表示するサンプル数
+#define PRINT_DATA_COUNT 8     // printfで表示するサンプル数
 #define PRINT_DATA_OFFSET 4000     // printf表示開始オフセット
 /* USER CODE END PD */
 
@@ -687,15 +687,15 @@ void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filt
   }
 }
 
-//void HAL_DFSDM_FilterErrorCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter) {
-//    if (hdfsdm_filter == &hdfsdm1_filter0) {
-//        printf("!!! DFSDM Filter Error Callback! ErrorCode: 0x%lX !!!\r\n", (unsigned long)hdfsdm_filter->ErrorCode);
-//        HAL_GPIO_WritePin(GPIOB, LD3_Pin, GPIO_PIN_SET);
-//        HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
+void HAL_DFSDM_FilterErrorCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter) {
+    if (hdfsdm_filter == &hdfsdm1_filter0) {
+        printf("!!! DFSDM Filter Error Callback! ErrorCode: 0x%lX !!!\r\n", (unsigned long)hdfsdm_filter->ErrorCode);
+        HAL_GPIO_WritePin(GPIOB, LD3_Pin, GPIO_PIN_SET);
+        HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
 //        mcu_state = STATE_ERROR;
 //        hardfault_indicator_flag = 1;
-//    }
-//}
+    }
+}
 
 
 //int _write(int file, char *ptr, int len)
