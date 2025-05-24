@@ -54,8 +54,8 @@ typedef enum {
 #define UART_RX_DMA_BUFFER_SIZE 128 // UART DMA受信バッファサイズ
 #define UART_TX_BUFFER_SIZE 256 // printf用UART送信バッファサイズ (sprintfで使用)
 
-#define PRINT_DATA_COUNT 30     // printfで表示するサンプル数
-#define PRINT_DATA_OFFSET 0     // printf表示開始オフセット
+#define PRINT_DATA_COUNT 300     // printfで表示するサンプル数
+#define PRINT_DATA_OFFSET 4000     // printf表示開始オフセット
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,27 +63,26 @@ typedef enum {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart3_rx; // ★ UART RX DMAハンドル宣言
 
 DFSDM_Filter_HandleTypeDef hdfsdm1_filter0;
 DFSDM_Channel_HandleTypeDef hdfsdm1_channel0;
 DMA_HandleTypeDef hdma_dfsdm1_flt0;
 
-UART_HandleTypeDef huart3;
-DMA_HandleTypeDef hdma_usart3_rx;
-
 /* USER CODE BEGIN PV */
 volatile MCU_State_t mcu_state = STATE_READY;
 int32_t audio_buffer[AUDIO_BUFFER_SIZE_SAMPLES_MAX];
 
-uint8_t uart_rx_dma_buffer[UART_RX_DMA_BUFFER_SIZE]; // UART DMA受信用バッファ
+uint8_t uart_rx_dma_buffer[UART_RX_DMA_BUFFER_SIZE];
 volatile uint8_t uart_cmd_received_flag = 0;
-volatile uint16_t uart_received_dma_size = 0; // DMAで実際に受信したサイズ
+volatile uint16_t uart_received_dma_size = 0;
 
-char parsed_cmd_payload_buffer[UART_RX_DMA_BUFFER_SIZE]; // LISTENコマンドのパラメータ部分を保持
+char parsed_cmd_payload_buffer[UART_RX_DMA_BUFFER_SIZE];
 
-volatile uint8_t dma_transfer_complete_flag = 0; // DFSDM DMA完了フラグ
+volatile uint8_t dma_transfer_complete_flag = 0; // ★ dma_full_transfer_complete_flag から変更
 volatile uint8_t user_button_pressed_flag = 0;
-volatile uint8_t hardfault_indicator_flag = 0;   // HardFault発生表示用フラグ
+volatile uint8_t hardfault_indicator_flag = 0;   // ★ グローバル変数として宣言
 
 // DFSDM パラメータのグローバル変数
 volatile uint32_t g_dfsdm_sinc_order = DFSDM_FILTER_SINC3_ORDER;
@@ -106,12 +105,12 @@ static void MX_DFSDM1_Init(void);
 static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static UART_Command_t UART_Parse_Command(char* cmd_buffer, uint32_t len);
-static void UART_Process_Received_DMA_Data(void); // ★ DMA受信データを処理する関数 (名前変更、引数なし)
+static void UART_Process_Received_DMA_Data(void); // ★ プロトタイプ宣言修正 (引数なし)
 static void ReInitialize_DFSDM_And_Start_Listen(const char* params_payload);
 static uint32_t MapSincOrderNumToDefine(uint32_t order_num);
 static uint32_t Calculate_Current_Sampling_Frequency_Hz(void);
 static void Print_Audio_Data(void);
-static void Start_UART_DMA_Receive(void); // UART DMA受信を開始/再開する関数
+static void Start_UART_DMA_Receive(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -121,13 +120,13 @@ static void Start_UART_DMA_Receive(void); // UART DMA受信を開始/再開す�
 #ifdef __GNUC__
 int _write(int file, char *ptr, int len)
 {
-  HAL_UART_Transmit(&huart3, (uint8_t*)ptr, len, HAL_MAX_DELAY); // ★ 使用するUARTハンドル
+  HAL_UART_Transmit(&huart3, (uint8_t*)ptr, len, HAL_MAX_DELAY);
   return len;
 }
 #else
 int fputc(int ch, FILE *f)
 {
-  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, HAL_MAX_DELAY); // ★ 使用するUARTハンドル
+  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 #endif
@@ -141,7 +140,6 @@ static void Start_UART_DMA_Receive(void) {
         Error_Handler();
     }
 }
-
 
 static uint32_t Calculate_Current_Sampling_Frequency_Hz(void) {
     uint32_t pclk2_hz = HAL_RCC_GetPCLK2Freq();
@@ -235,7 +233,7 @@ static void ReInitialize_DFSDM_And_Start_Listen(const char* params_payload) {
     sprintf(current_params_msg, "New Calculated Fs: %lu Hz\r\n", (unsigned long)new_fs);
     printf(current_params_msg);
 
-    dma_transfer_complete_flag = 0; // ★ dma_full_transfer_complete_flag から修正
+    dma_transfer_complete_flag = 0;
     mcu_state = STATE_LISTENING;
     printf("DBG: State changed to LISTENING.\r\n");
     HAL_GPIO_WritePin(GPIOB, LD1_Pin, GPIO_PIN_SET);
@@ -284,7 +282,7 @@ static UART_Command_t UART_Parse_Command(char* cmd_buffer, uint32_t len) {
     return CMD_UNKNOWN;
 }
 
-static void UART_Process_Received_DMA_Data(void) { // ★ 関数名を PFP と合わせる
+static void UART_Process_Received_DMA_Data(void) {
     uart_rx_dma_buffer[uart_received_dma_size] = '\0';
     printf("UART CMD RX (DMA): '%s'\r\n", (char*)uart_rx_dma_buffer);
 
@@ -319,7 +317,7 @@ static void UART_Process_Received_DMA_Data(void) { // ★ 関数名を PFP と�
             printf("Error: Unknown UART command: '%s'\r\n", (char*)uart_rx_dma_buffer);
             break;
     }
-    Start_UART_DMA_Receive();
+    Start_UART_DMA_Receive(); // ★ 次のDMA受信を開始
 }
 
 
@@ -339,31 +337,16 @@ static void Print_Audio_Data(void) {
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
+  MX_USART3_UART_Init(); // ★ Initialize USART3
   MX_DFSDM1_Init();
-  MX_USART3_UART_Init();
+
   /* USER CODE BEGIN 2 */
   printf("DFSDM UART DMA Command Interface Ready.\r\n");
   printf("Cmd format: LISTEN SINC=N OV=N IOSR=N CLKDIV=N RBS=N (params optional)\r\n");
@@ -382,7 +365,7 @@ int main(void)
             (unsigned long)g_dfsdm_right_bit_shift, (unsigned long)Calculate_Current_Sampling_Frequency_Hz());
   printf(initial_params_msg);
 
-  Start_UART_DMA_Receive();
+  Start_UART_DMA_Receive(); // ★ Start UART DMA reception
   mcu_state = STATE_READY;
   /* USER CODE END 2 */
 
@@ -391,7 +374,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
     if (hardfault_indicator_flag) {
         HAL_GPIO_TogglePin(GPIOB, LD3_Pin);
@@ -406,7 +388,7 @@ int main(void)
             HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
             mcu_state = STATE_READY;
         }
-        UART_Process_Received_DMA_Data(); // ★ 関数名を PFP と合わせる
+        UART_Process_Received_DMA_Data();
     }
 
     if (user_button_pressed_flag) {
@@ -420,8 +402,8 @@ int main(void)
         }
     }
 
-    if (dma_transfer_complete_flag) { // ★ dma_full_transfer_complete_flag から修正
-        dma_transfer_complete_flag = 0; // ★ dma_full_transfer_complete_flag から修正
+    if (dma_transfer_complete_flag) {
+        dma_transfer_complete_flag = 0;
         if (mcu_state == STATE_LISTENING) {
             printf("DBG: Main loop: DFSDM DMA complete flag set AND state is LISTENING.\r\n");
             mcu_state = STATE_DATA_READY;
@@ -468,33 +450,35 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
   __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 216;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 9;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
   {
     Error_Handler();
   }
@@ -507,7 +491,6 @@ void SystemClock_Config(void)
   */
 static void MX_DFSDM1_Init(void)
 {
-
   /* USER CODE BEGIN DFSDM1_Init 0 */
   hdfsdm1_filter0.Init.FilterParam.SincOrder = g_dfsdm_sinc_order;
   hdfsdm1_filter0.Init.FilterParam.Oversampling = g_dfsdm_filter_oversampling;
@@ -532,54 +515,43 @@ static void MX_DFSDM1_Init(void)
   hdfsdm1_channel0.Init.Offset = 0;
   /* USER CODE END DFSDM1_Init 0 */
 
+  hdfsdm1_filter0.Instance = DFSDM1_Filter0;
+  hdfsdm1_channel0.Instance = DFSDM1_Channel0;
   /* USER CODE BEGIN DFSDM1_Init 1 */
   /* USER CODE END DFSDM1_Init 1 */
-  hdfsdm1_filter0.Instance = DFSDM1_Filter0;
-  hdfsdm1_filter0.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
-  hdfsdm1_filter0.Init.RegularParam.FastMode = ENABLE;
-  hdfsdm1_filter0.Init.RegularParam.DmaMode = ENABLE;
-  hdfsdm1_filter0.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC3_ORDER;
-  hdfsdm1_filter0.Init.FilterParam.Oversampling = 125;
-  hdfsdm1_filter0.Init.FilterParam.IntOversampling = 1;
-  HAL_DFSDM_FilterInit(&hdfsdm1_filter0);
-  hdfsdm1_channel0.Instance = DFSDM1_Channel0;
-  hdfsdm1_channel0.Init.OutputClock.Activation = ENABLE;
-  hdfsdm1_channel0.Init.OutputClock.Selection = DFSDM_CHANNEL_OUTPUT_CLOCK_SYSTEM;
-  hdfsdm1_channel0.Init.OutputClock.Divider = 8;
-  hdfsdm1_channel0.Init.Input.Multiplexer = DFSDM_CHANNEL_EXTERNAL_INPUTS;
-  hdfsdm1_channel0.Init.Input.DataPacking = DFSDM_CHANNEL_STANDARD_MODE;
-  hdfsdm1_channel0.Init.Input.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS;
-  hdfsdm1_channel0.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_FALLING;
-  hdfsdm1_channel0.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
-  hdfsdm1_channel0.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
-  hdfsdm1_channel0.Init.Awd.Oversampling = 1;
-  hdfsdm1_channel0.Init.Offset = 0;
-  hdfsdm1_channel0.Init.RightBitShift = 0x02;
-  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel0) != HAL_OK)
+
+  if (HAL_DFSDM_FilterInit(&hdfsdm1_filter0) != HAL_OK)
   {
+    printf("FATAL: HAL_DFSDM_FilterInit failed! ErrorCode: 0x%lX\r\n", (unsigned long)hdfsdm1_filter0.ErrorCode);
     Error_Handler();
   }
-  HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter0, DFSDM_CHANNEL_0, DFSDM_CONTINUOUS_CONV_ON);
+
+  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel0) != HAL_OK)
+  {
+    printf("FATAL: HAL_DFSDM_ChannelInit failed! State: %d\r\n", hdfsdm1_channel0.State);
+    Error_Handler();
+  }
+
+  if (HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter0, DFSDM_CHANNEL_0, DFSDM_CONTINUOUS_CONV_ON) != HAL_OK)
+  {
+    printf("FATAL: HAL_DFSDM_FilterConfigRegChannel failed!\r\n");
+    Error_Handler();
+  }
   /* USER CODE BEGIN DFSDM1_Init 2 */
 
   /* USER CODE END DFSDM1_Init 2 */
-
 }
 
 /**
-  * @brief USART3 Initialization Function
+  * @brief USART3 Initialization Function (Example for Nucleo VCP)
   * @param None
   * @retval None
   */
-static void MX_USART3_UART_Init(void)
+static void MX_USART3_UART_Init(void) // ★ Renamed to USART3
 {
-
   /* USER CODE BEGIN USART3_Init 0 */
   /* USER CODE END USART3_Init 0 */
-
-  /* USER CODE BEGIN USART3_Init 1 */
-  /* USER CODE END USART3_Init 1 */
-  huart3.Instance = USART3;
+  huart3.Instance = USART3; // ★ Changed to USART3
   huart3.Init.BaudRate = 115200;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
@@ -593,29 +565,10 @@ static void MX_USART3_UART_Init(void)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN USART3_Init 1 */
+  /* USER CODE END USART3_Init 1 */
   /* USER CODE BEGIN USART3_Init 2 */
   /* USER CODE END USART3_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA2_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Stream1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
-  /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-
 }
 
 /**
@@ -630,99 +583,56 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOG_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE(); // For User Button (PC13) and DFSDM Pins (PC1, PC2)
+  __HAL_RCC_GPIOH_CLK_ENABLE(); // For HSE (if PH0/PH1 used)
+  __HAL_RCC_GPIOD_CLK_ENABLE(); // ★ For USART3 Tx/Rx (PD8, PD9 if USART3 is used on Nucleo-F767ZI)
+  __HAL_RCC_GPIOB_CLK_ENABLE(); // For LEDs (PB0, PB7, PB14)
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD2_Pin|LD3_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : USER_Btn_Pin */
+  /*Configure GPIO pin : USER_Btn_Pin (PC13) */
   GPIO_InitStruct.Pin = USER_Btn_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct); // Assuming USER_Btn_GPIO_Port is GPIOC
 
-  /*Configure GPIO pins : RMII_REF_CLK_Pin RMII_MDIO_Pin RMII_CRS_DV_Pin */
-  GPIO_InitStruct.Pin = RMII_REF_CLK_Pin|RMII_MDIO_Pin|RMII_CRS_DV_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : RMII_RXD0_Pin RMII_RXD1_Pin */
-  GPIO_InitStruct.Pin = RMII_RXD0_Pin|RMII_RXD1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : LD1_Pin LD3_Pin LD2_Pin */
-  GPIO_InitStruct.Pin = LD1_Pin|LD3_Pin|LD2_Pin;
+  /*Configure GPIO pins : LD1_Pin LD2_Pin LD3_Pin */
+  GPIO_InitStruct.Pin = LD1_Pin|LD2_Pin|LD3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : RMII_TXD1_Pin */
-  GPIO_InitStruct.Pin = RMII_TXD1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-  HAL_GPIO_Init(RMII_TXD1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : USB_PowerSwitchOn_Pin */
-  GPIO_InitStruct.Pin = USB_PowerSwitchOn_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(USB_PowerSwitchOn_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : USB_OverCurrent_Pin */
-  GPIO_InitStruct.Pin = USB_OverCurrent_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(USB_OverCurrent_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : USB_SOF_Pin USB_ID_Pin USB_DM_Pin USB_DP_Pin */
-  GPIO_InitStruct.Pin = USB_SOF_Pin|USB_ID_Pin|USB_DM_Pin|USB_DP_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : USB_VBUS_Pin */
-  GPIO_InitStruct.Pin = USB_VBUS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(USB_VBUS_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : RMII_TX_EN_Pin RMII_TXD0_Pin */
-  GPIO_InitStruct.Pin = RMII_TX_EN_Pin|RMII_TXD0_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  /* EXTI interrupt init for User Button */
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   // UART and DFSDM GPIOs are configured in their respective MspInit functions
   /* USER CODE END MX_GPIO_Init_2 */
 }
+
+/**
+  * @brief DMA Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DMA_Init(void) // This function enables DMA controller clocks and base NVIC for DFSDM DMA
+{
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE(); // For DFSDM1_FLT0 (e.g. Stream0)
+  __HAL_RCC_DMA1_CLK_ENABLE(); // ★ For USART3_RX (e.g. Stream1 on DMA1)
+
+  /* DMA interrupt init for DFSDM */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+  /* DMA interrupt init for UART RX (Example: DMA1 Stream1 for USART3_RX) */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0); // ★ Example for DMA1_Stream1 (adjust if different)
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);        // ★ Example for DMA1_Stream1 (adjust if different)
+}
+
 
 /* USER CODE BEGIN 4 */
 // UART RX Event Callback (for HAL_UARTEx_ReceiveToIdle_DMA)
@@ -736,7 +646,6 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     }
     // Important: Do NOT restart DMA reception here if you want to process the command
     // and then decide to restart. Restart it in UART_Process_Received_DMA_Data.
-    // If you restart here, and main loop is slow, you might get another RxEvent before processing.
   }
 }
 
@@ -747,10 +656,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
     uint32_t error_code = HAL_UART_GetError(huart);
     printf("UART Error Callback! ErrorCode: 0x%lX\r\n", error_code);
     HAL_GPIO_WritePin(GPIOB, LD3_Pin, GPIO_PIN_SET);
-    // Attempt to recover by re-starting DMA reception
-    // This might clear some error flags implicitly.
-    // Consider more specific error handling based on error_code.
-    Start_UART_DMA_Receive();
+    Start_UART_DMA_Receive(); // Attempt to recover
   }
 }
 
@@ -781,15 +687,27 @@ void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filt
   }
 }
 
-void HAL_DFSDM_FilterErrorCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter) {
-    if (hdfsdm_filter == &hdfsdm1_filter0) {
-        printf("!!! DFSDM Filter Error Callback! ErrorCode: 0x%lX !!!\r\n", (unsigned long)hdfsdm_filter->ErrorCode);
-        HAL_GPIO_WritePin(GPIOB, LD3_Pin, GPIO_PIN_SET);
-        HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
-        mcu_state = STATE_ERROR;
-        hardfault_indicator_flag = 1;
-    }
-}
+//void HAL_DFSDM_FilterErrorCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter) {
+//    if (hdfsdm_filter == &hdfsdm1_filter0) {
+//        printf("!!! DFSDM Filter Error Callback! ErrorCode: 0x%lX !!!\r\n", (unsigned long)hdfsdm_filter->ErrorCode);
+//        HAL_GPIO_WritePin(GPIOB, LD3_Pin, GPIO_PIN_SET);
+//        HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
+//        mcu_state = STATE_ERROR;
+//        hardfault_indicator_flag = 1;
+//    }
+//}
+
+
+//int _write(int file, char *ptr, int len)
+//{
+//	int DataIdx;
+//	for(DataIdx=0; DataIdx<len; DataIdx++)
+//	{
+//	  ITM_SendChar(*ptr++);
+//	}
+//	return len;
+//}
+
 /* USER CODE END 4 */
 
 /**
@@ -815,7 +733,7 @@ void Error_Handler(void)
 #ifdef  USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
+  * where the assert_param error has occurred.
   * @param  file: pointer to the source file name
   * @param  line: assert_param error line source number
   * @retval None

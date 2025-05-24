@@ -24,7 +24,7 @@
 
 /* USER CODE END Includes */
 extern DMA_HandleTypeDef hdma_dfsdm1_flt0;
-extern DMA_HandleTypeDef hdma_usart3_rx; // USART3 RX用DMAハンドルのextern宣言 (main.cで定義されている想定)
+extern DMA_HandleTypeDef hdma_usart3_rx; // USART3 RX用DMAハンドルのextern宣言
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
@@ -43,9 +43,8 @@ extern DMA_HandleTypeDef hdma_usart3_rx; // USART3 RX用DMAハンドルのextern
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-// DFSDM1_common_initialized_flag は、DFSDM関連の共通リソース (GPIOなど) が初期化済みかどうかのフラグとして使用
+// 各ペリフェラルの共通リソース (GPIOなど) が初期化済みかどうかのフラグとして使用
 static uint32_t DFSDM1_common_initialized_flag = 0;
-// USART3_common_initialized_flag は、USART3関連の共通リソース (GPIOなど) が初期化済みかどうかのフラグとして使用
 static uint32_t USART3_common_initialized_flag = 0;
 /* USER CODE END PV */
 
@@ -190,8 +189,8 @@ void HAL_DFSDM_FilterMspDeInit(DFSDM_Filter_HandleTypeDef* hdfsdm_filter)
   /* USER CODE BEGIN DFSDM1_MspDeInit 0 */
   /* USER CODE END DFSDM1_MspDeInit 0 */
 
-  // if (DFSDM1_common_initialized_flag > 0) // 既にDeInit済みでないか確認 (より安全に)
-  // {
+  if (DFSDM1_common_initialized_flag == 1) // 共通リソースが初期化されていたらDeInitする
+  {
     /* Peripheral clock disable */
     __HAL_RCC_DFSDM1_CLK_DISABLE();
 
@@ -202,17 +201,18 @@ void HAL_DFSDM_FilterMspDeInit(DFSDM_Filter_HandleTypeDef* hdfsdm_filter)
     HAL_GPIO_DeInit(PDM_DATA_GPIO_Port, PDM_DATA_Pin); // ピン定義に合わせてください
     HAL_GPIO_DeInit(PDWM_CLK_GPIO_Port, PDWM_CLK_Pin); // ピン定義に合わせてください
 
-    /* DFSDM1 DMA DeInit */
-    if(hdfsdm_filter->hdmaReg != NULL)
-    {
-      HAL_DMA_DeInit(hdfsdm_filter->hdmaReg);
-    }
-    if(hdfsdm_filter->hdmaInj != NULL) // Injected DMA (未使用なら不要かも)
-    {
-      HAL_DMA_DeInit(hdfsdm_filter->hdmaInj);
-    }
     DFSDM1_common_initialized_flag = 0; // 共通リソース初期化フラグをリセット
-  // }
+  }
+
+  /* DFSDM1 DMA DeInit */
+  if(hdfsdm_filter->hdmaReg != NULL)
+  {
+    HAL_DMA_DeInit(hdfsdm_filter->hdmaReg);
+  }
+  if(hdfsdm_filter->hdmaInj != NULL) // Injected DMA (未使用なら不要かも)
+  {
+    HAL_DMA_DeInit(hdfsdm_filter->hdmaInj);
+  }
   /* USER CODE BEGIN DFSDM1_MspDeInit 1 */
 
   /* USER CODE END DFSDM1_MspDeInit 1 */
@@ -230,9 +230,9 @@ void HAL_DFSDM_ChannelMspDeInit(DFSDM_Channel_HandleTypeDef* hdfsdm_channel)
   // 共通リソースの解放は FilterMspDeInit に集約するため、
   // ここではチャンネル固有のMSP解放処理があれば記述します。
   // DFSDM1_common_initialized_flag の操作も FilterMspDeInit に集約。
-  // もしチャンネルのDeInitがフィルターのDeInitとは独立して共通リソースを操作する必要がある場合は、
-  // DFSDM1_common_initialized_flag のような参照カウントのロジックをより精緻にする必要があります。
-  // 現状はFilterMspDeInitで共通リソースが解放される想定です。
+  // 注意: もしChannelDeInitがFilterDeInitとは独立して呼ばれる可能性がある場合、
+  // このフラグ管理では不十分な場合があります。
+  // 通常はFilterDeInitが呼ばれればChannelも不要になるという想定です。
   /* USER CODE END DFSDM1_ChannelMspDeInit 0 */
 
   /* USER CODE BEGIN DFSDM1_ChannelMspDeInit 1 */
@@ -258,30 +258,30 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
 
   /* USER CODE END USART3_MspInit 0 */
 
-    /* Peripheral clock source configuration */
+    /* Peripheral clock source configuration for USART3 */
     PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USART3;
-    PeriphClkInitStruct.Usart3ClockSelection = RCC_USART3CLKSOURCE_PCLK1; // または PCLK2 (CubeMX設定に合わせる)
+    PeriphClkInitStruct.Usart3ClockSelection = RCC_USART3CLKSOURCE_PCLK1; // PCLK1 (APB1) をクロックソースとする
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
     {
       Error_Handler();
     }
 
-    /* Peripheral clock enable */
+    /* Peripheral clock enable for USART3 */
     __HAL_RCC_USART3_CLK_ENABLE();
 
     if(USART3_common_initialized_flag == 0) // GPIOなど初回のみの初期化
     {
-        __HAL_RCC_GPIOD_CLK_ENABLE(); // ★ USART3のピンがあるGPIOポート (例: GPIOD for PD8/PD9)
+        __HAL_RCC_GPIOD_CLK_ENABLE(); // USART3のピン(PD8, PD9)があるGPIODを有効化
         /**USART3 GPIO Configuration
         PD8     ------> USART3_TX
         PD9     ------> USART3_RX
         */
-        GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9; // ★ ピン番号は実際の接続に合わせる
+        GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9; // STLink VCPのデフォルトピン
         GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-        GPIO_InitStruct.Pull = GPIO_PULLUP; // または GPIO_NOPULL
+        GPIO_InitStruct.Pull = GPIO_PULLUP;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-        GPIO_InitStruct.Alternate = GPIO_AF7_USART3; // ★ 代替機能を確認
-        HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);      // ★ GPIOポートを確認
+        GPIO_InitStruct.Alternate = GPIO_AF7_USART3; // USART3のAF
+        HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
         USART3_common_initialized_flag = 1;
     }
 
@@ -294,9 +294,8 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     hdma_usart3_rx.Init.MemInc = DMA_MINC_ENABLE;
     hdma_usart3_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     hdma_usart3_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-    hdma_usart3_rx.Init.Mode = DMA_NORMAL; // For ReceiveToIdle_DMA
+    hdma_usart3_rx.Init.Mode = DMA_NORMAL; // HAL_UARTEx_ReceiveToIdle_DMA を使用するためNORMAL
     hdma_usart3_rx.Init.Priority = DMA_PRIORITY_LOW;
-    // hdma_usart3_rx.Init.FIFOMode = DMA_FIFOMODE_DISABLE; // FIFO設定 (必要なら)
     if (HAL_DMA_Init(&hdma_usart3_rx) != HAL_OK)
     {
       Error_Handler();
@@ -305,12 +304,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     __HAL_LINKDMA(huart,hdmarx,hdma_usart3_rx);
 
     /* USART3 interrupt Init */
-    HAL_NVIC_SetPriority(USART3_IRQn, 5, 0); // UART自体の割り込み優先度 (0-15)
+    HAL_NVIC_SetPriority(USART3_IRQn, 5, 0); // UART自体の割り込み優先度
     HAL_NVIC_EnableIRQ(USART3_IRQn);
 
     /* DMA1 stream1 global interrupt configuration (USART3_RX用) */
-    HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 5, 0); // ★ DMAストリーム割り込み優先度
-    HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);       // ★ DMAストリーム割り込み有効化
+    HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 5, 0); // DMAストリーム割り込み優先度
+    HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);       // DMAストリーム割り込み有効化
 
   /* USER CODE BEGIN USART3_MspInit 1 */
 
@@ -338,14 +337,14 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     PD8     ------> USART3_TX
     PD9     ------> USART3_RX
     */
-    HAL_GPIO_DeInit(GPIOD, GPIO_PIN_8|GPIO_PIN_9); // ★ ピン定義に合わせてください
+    HAL_GPIO_DeInit(GPIOD, GPIO_PIN_8|GPIO_PIN_9); // ピン定義に合わせてください
 
     /* USART3 DMA DeInit */
     HAL_DMA_DeInit(huart->hdmarx);
 
     /* USART3 interrupt DeInit */
     HAL_NVIC_DisableIRQ(USART3_IRQn);
-    HAL_NVIC_DisableIRQ(DMA1_Stream1_IRQn); // ★ DMAストリーム割り込みも無効化
+    HAL_NVIC_DisableIRQ(DMA1_Stream1_IRQn); // DMAストリーム割り込みも無効化
 
     USART3_common_initialized_flag = 0; // フラグをリセット
   /* USER CODE BEGIN USART3_MspDeInit 1 */
