@@ -54,8 +54,8 @@ typedef enum {
 #define UART_RX_DMA_BUFFER_SIZE 128 // UART DMA受信バッファサイズ
 #define UART_TX_BUFFER_SIZE 256 // printf用UART送信バッファサイズ (sprintfで使用)
 
-#define PRINT_DATA_COUNT 8     // printfで表示するサンプル数
-#define PRINT_DATA_OFFSET 4000     // printf表示開始オフセット
+#define PRINT_DATA_COUNT 16000     // printfで表示するサンプル数
+#define PRINT_DATA_OFFSET 0     // printf表示開始オフセット
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -323,7 +323,8 @@ static void UART_Process_Received_DMA_Data(void) {
 
 static void Print_Audio_Data(void) {
     printf("Audio data acquisition complete. Stop DMA status: %d\r\n", last_dma_stop_status);
-    printf("First %d samples (out of %lu) from audio_buffer:\r\n", PRINT_DATA_COUNT, (unsigned long)current_dma_samples_to_transfer);
+//    printf("First %d samples (out of %lu) from audio_buffer:\r\n", PRINT_DATA_COUNT, (unsigned long)current_dma_samples_to_transfer);
+    printf("Sending audio data...\r\n");
     for (int i = PRINT_DATA_OFFSET; i < PRINT_DATA_OFFSET + PRINT_DATA_COUNT && i < current_dma_samples_to_transfer; i++) {
         printf("Sample %d: %ld\r\n", i, audio_buffer[i]);
     }
