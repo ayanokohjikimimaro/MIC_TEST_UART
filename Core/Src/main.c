@@ -681,7 +681,7 @@ void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filt
 {
   if (hdfsdm_filter == &hdfsdm1_filter0) {
     if (mcu_state == STATE_LISTENING) {
-        last_dma_stop_status = HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
+//        last_dma_stop_status = HAL_DFSDM_FilterRegularStop_DMA(&hdfsdm1_filter0);
         dma_transfer_complete_flag = 1;
     }
   }
