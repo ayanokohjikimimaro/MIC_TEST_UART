@@ -1,6 +1,7 @@
 import serial
 import matplotlib.pyplot as plt
 import time
+import numpy as np
 
 # --- 設定 ---
 SERIAL_PORT = 'COM3'  # マイコンが接続されているCOMポート名 (Windowsの場合)
@@ -20,6 +21,7 @@ sample_prefix = "Sample "
 collecting_data = False
 samples_collected = 0
 max_samples_to_collect = 16000 # まずは8個のデータ
+FS = 16000
 
 ser = None # シリアルポートオブジェクトを初期化
 
@@ -56,7 +58,7 @@ try:
                 line = ser.readline().decode('utf-8', errors='ignore').strip()
                 if not line: # 空行はスキップ
                     continue
-                print(f"受信: {line}") # デバッグ用に受信行を表示
+                # print(f"受信: {line}") # デバッグ用に受信行を表示
             except Exception as e: # readlineやdecodeで予期せぬエラーが発生した場合
                 print(f"行の読み取り/デコード中にエラー: {e}")
                 continue
@@ -82,7 +84,8 @@ try:
                         audio_value = int(value_str)
                         audio_data_values.append(audio_value)
                         samples_collected += 1
-                        print(f"受信データ {samples_collected}/{max_samples_to_collect}: {audio_value}")
+                        # print(f"受信データ {samples_collected}/{max_samples_to_collect}: {audio_value}")
+                        print(f"\r受信データ {samples_collected}/{max_samples_to_collect}: {audio_value}            ", end="")
                     except (IndexError, ValueError) as e:
                         print(f"エラー: オーディオデータの解析に失敗しました。行: '{line}', エラー: {e}")
                 
@@ -112,15 +115,81 @@ finally:
 
 # --- 収集したデータをプロット ---
 if audio_data_values:
-    print("\n収集したオーディオデータ:")
-    print(audio_data_values[0:10])
-    plt.figure(figsize=(10, 6))
-    plt.plot(audio_data_values, marker='o')
-    # プロットするサンプル数をタイトルに動的に表示
-    plt.title(f'Received Audio Data (First {len(audio_data_values)} Samples)')
-    plt.xlabel('Sample Index (0-indexed)')
-    plt.ylabel('Audio Value')
-    plt.grid(True)
+    print(f"\n収集したオーディオデータの総数: {len(audio_data_values)}件")
+    
+    num_samples_to_show_each_end = 5
+    if len(audio_data_values) > (2 * num_samples_to_show_each_end):
+        print(f"  最初の{num_samples_to_show_each_end}件: {audio_data_values[:num_samples_to_show_each_end]}")
+        print(f"  最後の{num_samples_to_show_each_end}件: {audio_data_values[-num_samples_to_show_each_end:]}")
+        omitted_count = len(audio_data_values) - (2 * num_samples_to_show_each_end)
+        if omitted_count > 0:
+            print(f"  (他 {omitted_count} 件のデータは省略)")
+    else:
+        print(f"  全データ: {audio_data_values}")
+
+    # --- グラフ描画 ---
+    N = len(audio_data_values)
+    signal = np.array(audio_data_values)
+    FS = 16000  # サンプリング周波数 (Hz)
+
+    # FigureオブジェクトとAxesオブジェクトのリストを作成 (2行1列)
+    fig, axs = plt.subplots(2, 1, figsize=(10, 9)) # figsizeを調整して2つのグラフを見やすくする
+
+    # 1. 時間領域のオーディオデータプロット
+    axs[0].plot(signal, marker='.', linestyle='-') # マーカーを小さくするオプション
+    axs[0].set_title(f'Received Audio Data (Total {N} Samples)')
+    axs[0].set_xlabel('Sample Index (0-indexed)')
+    axs[0].set_ylabel('Audio Value')
+    axs[0].grid(True)
+
+    # 2. FFTマグニチュードスペクトルプロット
+    if N > 0: # データが1点以上ないとFFTできない/意味がない
+        # FFT計算
+        yf = np.fft.fft(signal)
+        xf = np.fft.fftfreq(N, d=1/FS) # 周波数軸の計算 (dはサンプリング間隔)
+
+        # 正の周波数成分のみ取得 (0Hzからナイキスト周波数まで)
+        # Nが偶数の場合 xf_positive は N/2 点、奇数の場合は (N+1)/2 点
+        positive_freq_indices = np.where(xf >= 0)[0] 
+        # 一般的には N//2 までで十分なことが多いが、fftfreq の出力を正しく扱う
+        # xf_positive = xf[positive_freq_indices]
+        # magnitude_spectrum = np.abs(yf[positive_freq_indices])
+
+        # より一般的な片側スペクトルの取得 (0からN//2-1番目の要素まで)
+        xf_plot = xf[:N//2]
+        magnitude_plot = np.abs(yf[:N//2])
+        # オプション: スケーリングして振幅スペクトルにする場合
+        # magnitude_plot = 2.0/N * np.abs(yf[0:N//2])
+        # magnitude_plot[0] = magnitude_plot[0] / 2.0 # DC成分は半分に (上記スケーリングの場合)
+
+        axs[1].plot(xf_plot, magnitude_plot)
+        axs[1].set_title('FFT Magnitude Spectrum')
+        axs[1].set_xlabel('Frequency (Hz)')
+        axs[1].set_ylabel('Magnitude')
+        axs[1].grid(True)
+        # axs[1].set_xlim([0, FS/2]) # 表示範囲をナイキスト周波数までに制限（通常は自動で良い感じになる）
+
+        # ピーク周波数の検出とマーキング
+        if len(magnitude_plot) > 0: # スペクトルデータが存在する場合
+            peak_index = np.argmax(magnitude_plot)
+            peak_frequency = xf_plot[peak_index]
+            peak_magnitude = magnitude_plot[peak_index]
+
+            axs[1].plot(peak_frequency, peak_magnitude, 'x', color='red', markersize=10, markeredgewidth=2,
+                        label=f'Peak: {peak_frequency:.2f} Hz')
+            axs[1].legend() # ピーク情報のラベルを凡例として表示
+            
+            # ピーク周波数をテキストで表示する場合（凡例と重複する可能性あり）
+            # axs[1].text(peak_frequency, peak_magnitude, f' {peak_frequency:.2f} Hz', 
+            #             color='red', va='bottom', ha='left')
+
+
+    else:
+        axs[1].set_title('FFT Magnitude Spectrum')
+        axs[1].text(0.5, 0.5, 'No data for FFT', horizontalalignment='center', verticalalignment='center', transform=axs[1].transAxes)
+
+
+    plt.tight_layout() # サブプロット間のレイアウトを自動調整
     plt.show()
 else:
     print("プロットするオーディオデータがありません。")
